@@ -1,0 +1,33 @@
+# System monitor configuration
+
+# Color codes for terminal output
+colors:
+  red: "\033[31m"
+  green: "\033[32m"
+  reset: "\033[0m"
+
+# Alert thresholds
+thresholds:
+  cpuUsage: 90.0            # in %
+  loadMultiplier: 2.0       # load average threshold = CPU_CORES * multiplier
+  memUsage: 75.0            # in %
+  memAvailablePercent: 5.0  # less than 5% available memory is critical
+  diskUtil: 90.0            # in %
+  netUtil: 70.0             # in %
+  contextSwitchPerCore: 10000  # per second
+  pageFaultRate: 500        # per second (approximate)
+
+# Duration for sampling (seconds)
+sampling:
+  interval: 1
+  count: 3
+  
+# Metric collection flags - all enabled by default
+metrics:
+  collectCpu: true
+  collectLoad: true
+  collectMemory: true
+  collectDisk: true
+  collectNetwork: true
+  collectContextSwitch: true
+  collectPageFault: true

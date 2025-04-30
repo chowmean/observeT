@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"math"
 	"net/http"
@@ -501,124 +502,138 @@ var (
 func collectMetricsLoop() {
 	for {
 		// Collect and update CPU usage metric
-		cpuUsage, err := getCPUUsage()
-		if err == nil {
-			cpuUsageGauge.Set(cpuUsage)
-			
-			// Set CPU threshold breach metric
-			if cpuUsage > AppConfig.ThresholdCpuUsage {
-				cpuThresholdBreached.Set(1)
-			} else {
-				cpuThresholdBreached.Set(0)
+		if AppConfig.CollectCpuMetrics {
+			cpuUsage, err := getCPUUsage()
+			if err == nil {
+				cpuUsageGauge.Set(cpuUsage)
+				
+				// Set CPU threshold breach metric
+				if cpuUsage > AppConfig.ThresholdCpuUsage {
+					cpuThresholdBreached.Set(1)
+				} else {
+					cpuThresholdBreached.Set(0)
+				}
 			}
 		}
 		
 		// Collect and update load average metric
-		load15, err := getLoadAverage()
-		if err == nil {
-			loadAvgGauge.Set(load15)
-			
-			// Set load threshold breach metric
-			// Load threshold = number of CPU cores * multiplier
-			cpuCores := getCPUCores()
-			loadThreshold := float64(cpuCores) * AppConfig.ThresholdLoadMultiplier
-			if load15 > loadThreshold {
-				loadThresholdBreached.Set(1)
-			} else {
-				loadThresholdBreached.Set(0)
+		if AppConfig.CollectLoadMetrics {
+			load15, err := getLoadAverage()
+			if err == nil {
+				loadAvgGauge.Set(load15)
+				
+				// Set load threshold breach metric
+				// Load threshold = number of CPU cores * multiplier
+				cpuCores := getCPUCores()
+				loadThreshold := float64(cpuCores) * AppConfig.ThresholdLoadMultiplier
+				if load15 > loadThreshold {
+					loadThresholdBreached.Set(1)
+				} else {
+					loadThresholdBreached.Set(0)
+				}
 			}
 		}
 		
 		// Collect and update memory usage metrics
-		memUsed, memAvailable, err := getMemoryUsage()
-		if err == nil {
-			memUsedGauge.Set(memUsed)
-			memAvailableGauge.Set(memAvailable)
-			
-			// Set memory usage threshold breach metrics
-			if memUsed > AppConfig.ThresholdMemUsage {
-				memUsageThresholdBreached.Set(1)
-			} else {
-				memUsageThresholdBreached.Set(0)
-			}
-			
-			if memAvailable < AppConfig.ThresholdMemAvailablePercent {
-				memAvailableThresholdBreached.Set(1)
-			} else {
-				memAvailableThresholdBreached.Set(0)
+		if AppConfig.CollectMemoryMetrics {
+			memUsed, memAvailable, err := getMemoryUsage()
+			if err == nil {
+				memUsedGauge.Set(memUsed)
+				memAvailableGauge.Set(memAvailable)
+				
+				// Set memory usage threshold breach metrics
+				if memUsed > AppConfig.ThresholdMemUsage {
+					memUsageThresholdBreached.Set(1)
+				} else {
+					memUsageThresholdBreached.Set(0)
+				}
+				
+				if memAvailable < AppConfig.ThresholdMemAvailablePercent {
+					memAvailableThresholdBreached.Set(1)
+				} else {
+					memAvailableThresholdBreached.Set(0)
+				}
 			}
 		}
 		
 		// Collect and update disk utilization metrics
-		diskUtils, err := getDiskUtilization()
-		if err == nil {
-			for disk, util := range diskUtils {
-				diskUtilGauges.WithLabelValues(disk).Set(util)
-				
-				// Set disk utilization threshold breach metric
-				if util > AppConfig.ThresholdDiskUtil {
-					diskUtilThresholdBreached.WithLabelValues(disk).Set(1)
-				} else {
-					diskUtilThresholdBreached.WithLabelValues(disk).Set(0)
+		if AppConfig.CollectDiskMetrics {
+			diskUtils, err := getDiskUtilization()
+			if err == nil {
+				for disk, util := range diskUtils {
+					diskUtilGauges.WithLabelValues(disk).Set(util)
+					
+					// Set disk utilization threshold breach metric
+					if util > AppConfig.ThresholdDiskUtil {
+						diskUtilThresholdBreached.WithLabelValues(disk).Set(1)
+					} else {
+						diskUtilThresholdBreached.WithLabelValues(disk).Set(0)
+					}
 				}
 			}
 		}
 		
 		// Collect and update network bandwidth metrics
-		netBandwidth, err := getNetworkBandwidth()
-		if err == nil {
-			for iface, rates := range netBandwidth {
-				rxRate := rates[0]
-				txRate := rates[1]
-				
-				networkRxGauges.WithLabelValues(iface).Set(rxRate)
-				networkTxGauges.WithLabelValues(iface).Set(txRate)
-				
-				// Set network threshold breach metrics
-				// Network threshold is based on a percentage of a typical 1Gbps link
-				netThreshold := AppConfig.ThresholdNetUtil
-				
-				if rxRate > netThreshold {
-					networkRxThresholdBreached.WithLabelValues(iface).Set(1)
-				} else {
-					networkRxThresholdBreached.WithLabelValues(iface).Set(0)
-				}
-				
-				if txRate > netThreshold {
-					networkTxThresholdBreached.WithLabelValues(iface).Set(1)
-				} else {
-					networkTxThresholdBreached.WithLabelValues(iface).Set(0)
+		if AppConfig.CollectNetworkMetrics {
+			netBandwidth, err := getNetworkBandwidth()
+			if err == nil {
+				for iface, rates := range netBandwidth {
+					rxRate := rates[0]
+					txRate := rates[1]
+					
+					networkRxGauges.WithLabelValues(iface).Set(rxRate)
+					networkTxGauges.WithLabelValues(iface).Set(txRate)
+					
+					// Set network threshold breach metrics
+					// Network threshold is based on a percentage of a typical 1Gbps link
+					netThreshold := AppConfig.ThresholdNetUtil
+					
+					if rxRate > netThreshold {
+						networkRxThresholdBreached.WithLabelValues(iface).Set(1)
+					} else {
+						networkRxThresholdBreached.WithLabelValues(iface).Set(0)
+					}
+					
+					if txRate > netThreshold {
+						networkTxThresholdBreached.WithLabelValues(iface).Set(1)
+					} else {
+						networkTxThresholdBreached.WithLabelValues(iface).Set(0)
+					}
 				}
 			}
 		}
 		
 		// Collect and update context switches metric
-		contextSwitches, err := getContextSwitches()
-		if err == nil {
-			contextSwitchesGauge.Set(float64(contextSwitches))
-			
-			// Set context switches threshold breach metric
-			// Context switches threshold is per core
-			cpuCores := getCPUCores()
-			csThreshold := AppConfig.ThresholdContextSwitchPerCore * cpuCores
-			
-			if contextSwitches > csThreshold {
-				contextSwitchesThresholdBreached.Set(1)
-			} else {
-				contextSwitchesThresholdBreached.Set(0)
+		if AppConfig.CollectContextSwitchMetrics {
+			contextSwitches, err := getContextSwitches()
+			if err == nil {
+				contextSwitchesGauge.Set(float64(contextSwitches))
+				
+				// Set context switches threshold breach metric
+				// Context switches threshold is per core
+				cpuCores := getCPUCores()
+				csThreshold := AppConfig.ThresholdContextSwitchPerCore * cpuCores
+				
+				if contextSwitches > csThreshold {
+					contextSwitchesThresholdBreached.Set(1)
+				} else {
+					contextSwitchesThresholdBreached.Set(0)
+				}
 			}
 		}
 		
 		// Collect and update page faults metric
-		pageFaults, err := getPageFaults()
-		if err == nil {
-			pageFaultsGauge.Set(float64(pageFaults))
-			
-			// Set page faults threshold breach metric
-			if pageFaults > AppConfig.ThresholdPageFaultRate {
-				pageFaultsThresholdBreached.Set(1)
-			} else {
-				pageFaultsThresholdBreached.Set(0)
+		if AppConfig.CollectPageFaultMetrics {
+			pageFaults, err := getPageFaults()
+			if err == nil {
+				pageFaultsGauge.Set(float64(pageFaults))
+				
+				// Set page faults threshold breach metric
+				if pageFaults > AppConfig.ThresholdPageFaultRate {
+					pageFaultsThresholdBreached.Set(1)
+				} else {
+					pageFaultsThresholdBreached.Set(0)
+				}
 			}
 		}
 		
@@ -628,27 +643,82 @@ func collectMetricsLoop() {
 }
 
 func main() {
-	// Register Prometheus metrics
-	prometheus.MustRegister(cpuUsageGauge)
-	prometheus.MustRegister(loadAvgGauge)
-	prometheus.MustRegister(memUsedGauge)
-	prometheus.MustRegister(memAvailableGauge)
-	prometheus.MustRegister(diskUtilGauges)
-	prometheus.MustRegister(networkRxGauges)
-	prometheus.MustRegister(networkTxGauges)
-	prometheus.MustRegister(contextSwitchesGauge)
-	prometheus.MustRegister(pageFaultsGauge)
+	// Define command-line flag for configuration file
+	configFlag := flag.String("config", "config.yaml", "Path to YAML configuration file")
 	
-	// Register threshold breach metrics
-	prometheus.MustRegister(cpuThresholdBreached)
-	prometheus.MustRegister(loadThresholdBreached)
-	prometheus.MustRegister(memUsageThresholdBreached)
-	prometheus.MustRegister(memAvailableThresholdBreached)
-	prometheus.MustRegister(diskUtilThresholdBreached)
-	prometheus.MustRegister(networkRxThresholdBreached)
-	prometheus.MustRegister(networkTxThresholdBreached)
-	prometheus.MustRegister(contextSwitchesThresholdBreached)
-	prometheus.MustRegister(pageFaultsThresholdBreached)
+	// Define command-line flags to enable/disable metrics
+	cpuFlag := flag.Bool("cpu", true, "Enable CPU metrics collection")
+	loadFlag := flag.Bool("load", true, "Enable load average metrics collection")
+	memoryFlag := flag.Bool("memory", true, "Enable memory metrics collection")
+	diskFlag := flag.Bool("disk", true, "Enable disk utilization metrics collection")
+	networkFlag := flag.Bool("network", true, "Enable network bandwidth metrics collection")
+	contextSwitchFlag := flag.Bool("ctx-switch", true, "Enable context switch metrics collection")
+	pageFaultFlag := flag.Bool("page-fault", true, "Enable page fault metrics collection")
+	allFlag := flag.Bool("all", true, "Enable all metrics collection (overrides individual settings)")
+	flag.Parse()
+	
+	// Load configuration from specified YAML file
+	InitConfigFromPath(*configFlag)
+	
+	// Override configuration with command-line flags
+	if !*allFlag {
+		AppConfig.CollectCpuMetrics = *cpuFlag
+		AppConfig.CollectLoadMetrics = *loadFlag
+		AppConfig.CollectMemoryMetrics = *memoryFlag
+		AppConfig.CollectDiskMetrics = *diskFlag
+		AppConfig.CollectNetworkMetrics = *networkFlag
+		AppConfig.CollectContextSwitchMetrics = *contextSwitchFlag
+		AppConfig.CollectPageFaultMetrics = *pageFaultFlag
+	} else {
+		// Enable all metrics if -all flag is true
+		AppConfig.CollectCpuMetrics = true
+		AppConfig.CollectLoadMetrics = true
+		AppConfig.CollectMemoryMetrics = true
+		AppConfig.CollectDiskMetrics = true
+		AppConfig.CollectNetworkMetrics = true
+		AppConfig.CollectContextSwitchMetrics = true
+		AppConfig.CollectPageFaultMetrics = true
+	}
+
+	// Register Prometheus metrics based on configuration flags
+	if AppConfig.CollectCpuMetrics {
+		prometheus.MustRegister(cpuUsageGauge)
+		prometheus.MustRegister(cpuThresholdBreached)
+	}
+	
+	if AppConfig.CollectLoadMetrics {
+		prometheus.MustRegister(loadAvgGauge)
+		prometheus.MustRegister(loadThresholdBreached)
+	}
+	
+	if AppConfig.CollectMemoryMetrics {
+		prometheus.MustRegister(memUsedGauge)
+		prometheus.MustRegister(memAvailableGauge)
+		prometheus.MustRegister(memUsageThresholdBreached)
+		prometheus.MustRegister(memAvailableThresholdBreached)
+	}
+	
+	if AppConfig.CollectDiskMetrics {
+		prometheus.MustRegister(diskUtilGauges)
+		prometheus.MustRegister(diskUtilThresholdBreached)
+	}
+	
+	if AppConfig.CollectNetworkMetrics {
+		prometheus.MustRegister(networkRxGauges)
+		prometheus.MustRegister(networkTxGauges)
+		prometheus.MustRegister(networkRxThresholdBreached)
+		prometheus.MustRegister(networkTxThresholdBreached)
+	}
+	
+	if AppConfig.CollectContextSwitchMetrics {
+		prometheus.MustRegister(contextSwitchesGauge)
+		prometheus.MustRegister(contextSwitchesThresholdBreached)
+	}
+	
+	if AppConfig.CollectPageFaultMetrics {
+		prometheus.MustRegister(pageFaultsGauge)
+		prometheus.MustRegister(pageFaultsThresholdBreached)
+	}
 	
 	// Start metrics collection in a goroutine
 	go collectMetricsLoop()
@@ -661,7 +731,7 @@ func main() {
 		os.Exit(1)
 	}
 	
-	fmt.Println("=== System Monitoring Service Started ===")
+	fmt.Println("=== observeT Service Started ===")
 	fmt.Printf("CPU cores: %d\n", cpuCores)
 	fmt.Printf("Total Memory: %dMB\n", totalMemMB)
 	fmt.Printf("Sample interval: %ds, Samples: %d\n", AppConfig.SampleInterval, AppConfig.SampleCount)

@@ -14,6 +14,7 @@ A lightweight system monitoring tool for macOS that collects system metrics, exp
   - Network bandwidth (RX/TX)
   - Context switches
   - Page faults
+- Selective metrics collection (enable/disable specific metrics)
 - Threshold-based alerting (configurable thresholds)
 - Prometheus metrics endpoint
 - Pre-configured Grafana dashboard
@@ -69,6 +70,38 @@ You can modify these settings directly in `config.go` before building the applic
 ```
 
 By default, ObservT exposes metrics on http://localhost:9095/metrics.
+
+## Command-line Flags
+
+ObservT supports the following command-line flags to customize its behavior:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-config` | "config.yaml" | Path to YAML configuration file |
+| `-cpu` | true | Enable/disable CPU metrics collection |
+| `-load` | true | Enable/disable load average metrics collection |
+| `-memory` | true | Enable/disable memory metrics collection |
+| `-disk` | true | Enable/disable disk utilization metrics collection |
+| `-network` | true | Enable/disable network bandwidth metrics collection |
+| `-ctx-switch` | true | Enable/disable context switch metrics collection |
+| `-page-fault` | true | Enable/disable page fault metrics collection |
+| `-all` | true | Master switch to enable/disable all metrics |
+
+Examples:
+
+```
+# Collect only CPU and memory metrics
+./observT -all=false -cpu=true -memory=true
+
+# Collect all metrics except context switches
+./observT -ctx-switch=false 
+
+# Run with all default metrics (everything enabled)
+./observT
+
+# Use a different configuration file
+./observT -config=/path/to/custom-config.yaml
+```
 
 ## Setting up Prometheus
 
