@@ -39,10 +39,6 @@ A lightweight system monitoring tool for macOS that collects system metrics, exp
    go build -o observT main.go config.go
    ```
 
-3. Build the memory stress test tool (optional):
-   ```
-   go build -o memory-stress memory-stress.go
-   ```
 
 ## Configuration
 
@@ -133,29 +129,6 @@ Examples:
 4. Import the dashboard:
    - Navigate to Dashboards > Import
    - Upload the JSON file from grafana/system_monitor_dashboard.json
-
-## Testing Threshold Breaches
-
-The repository includes a memory stress testing tool to help you test threshold breach alerts:
-
-```
-./memory-stress --help
-
-Usage:
-  ./memory-stress [flags]
-
-Flags:
-  --duration int     Duration in seconds to run the memory stress test (default 60)
-  --interval int     Interval in seconds between memory allocations (default 5)
-  --percent int      Target memory usage percentage (default 90)
-```
-
-Example:
-```
-./memory-stress --percent=95 --duration=120 --interval=2
-```
-
-This will gradually allocate memory until your system reaches 95% memory usage, maintain it for 120 seconds, and allocate memory in chunks every 2 seconds.
 
 ## Metrics
 
