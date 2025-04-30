@@ -167,7 +167,7 @@ These metrics emit 1 when a threshold is breached, 0 otherwise:
 
 ## License
 
-MIT
+This project is licensed under a custom license that allows free use with attribution for individuals and small organizations. Enterprise users must obtain explicit permission for commercial use. See the [LICENSE](LICENSE) file for details.
 
 ## Contributing
 
