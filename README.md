@@ -1,6 +1,8 @@
-# System Monitor
+# ObservT
 
 A lightweight system monitoring tool for macOS that collects system metrics, exposes them via Prometheus, and visualizes them with Grafana.
+
+**Current Version: 0.0.1**
 
 ## Features
 
@@ -27,13 +29,13 @@ A lightweight system monitoring tool for macOS that collects system metrics, exp
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/system-monitor.git
-   cd system-monitor
+   git clone https://github.com/yourusername/observT.git
+   cd observT
    ```
 
 2. Build the monitoring tool:
    ```
-   go build -o system-monitor main.go config.go
+   go build -o observT main.go config.go
    ```
 
 3. Build the memory stress test tool (optional):
@@ -60,13 +62,13 @@ Configuration is managed in `config.go`. The default configuration includes:
 
 You can modify these settings directly in `config.go` before building the application.
 
-## Running the System Monitor
+## Running ObservT
 
 ```
-./system-monitor
+./observT
 ```
 
-By default, the system monitor exposes metrics on http://localhost:9095/metrics.
+By default, ObservT exposes metrics on http://localhost:9095/metrics.
 
 ## Setting up Prometheus
 
