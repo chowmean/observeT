@@ -17,6 +17,10 @@ type MetricsCollector interface {
 	
 	// Network metrics
 	GetNetworkBandwidth() (map[string][2]float64, error) // Returns map[interface][rx, tx]
+	GetNetworkErrors() (map[string][2]int64, error) // Returns map[interface][rx_errors, tx_errors]
+	GetNetworkDropped() (map[string][2]int64, error) // Returns map[interface][rx_dropped, tx_dropped]
+	GetNetworkLatency() (map[string]float64, error) // Returns latency in ms for key destinations
+	GetPacketLoss() (map[string]float64, error) // Returns packet loss percentage for key destinations
 	
 	// System metrics
 	GetContextSwitches() (int, error)

@@ -228,3 +228,124 @@ func (wc *WindowsCollector) GetPageFaults() (int, error) {
 
 	return int(pfVal), nil
 }
+
+// GetNetworkErrors returns network interface errors (in and out) per interface
+func (wc *WindowsCollector) GetNetworkErrors() (map[string][2]int64, error) {
+	// Get network errors using PowerShell
+	cmd := exec.Command("powershell", "-Command", 
+		"Get-NetAdapterStatistics | ForEach-Object { $name = $_.Name; Write-Output \"$name,$($_.ReceivedErrors),$($_.OutboundErrors)\" }")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	interfaces := make(map[string][2]int64)
+
+	for _, line := range lines {
+		parts := strings.Split(line, ",")
+		if len(parts) >= 3 {
+			iface := parts[0]
+			rxErrors, err1 := strconv.ParseInt(parts[1], 10, 64)
+			txErrors, err2 := strconv.ParseInt(parts[2], 10, 64)
+
+			if err1 == nil && err2 == nil {
+				interfaces[iface] = [2]int64{rxErrors, txErrors}
+			}
+		}
+	}
+
+	return interfaces, nil
+}
+
+// GetNetworkDropped returns dropped packets (in and out) per interface
+func (wc *WindowsCollector) GetNetworkDropped() (map[string][2]int64, error) {
+	// Windows doesn't directly expose dropped packet counts through standard cmdlets
+	// Use a custom query to approximate this information from performance counters
+	cmd := exec.Command("powershell", "-Command", 
+		"Get-Counter '\\Network Interface(*)\\Packets Received Discarded' -ErrorAction SilentlyContinue | ForEach-Object { $_.CounterSamples } | ForEach-Object { $name = ($_.Path -split '\\\\Network Interface\\(|\\)\\')[1]; $value = $_.CookedValue; Write-Output \"$name,$value,0\" }")
+	output, err := cmd.CombinedOutput()
+	
+	// Return empty if the counter isn't available
+	if err != nil {
+		return make(map[string][2]int64), nil
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	interfaces := make(map[string][2]int64)
+
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		
+		parts := strings.Split(line, ",")
+		if len(parts) >= 3 {
+			iface := parts[0]
+			rxDrops, err1 := strconv.ParseInt(parts[1], 10, 64)
+			txDrops := int64(0) // Windows doesn't easily expose TX drops
+			
+			if err1 == nil {
+				interfaces[iface] = [2]int64{rxDrops, txDrops}
+			}
+		}
+	}
+
+	return interfaces, nil
+}
+
+// GetNetworkLatency measures latency to common destinations
+func (wc *WindowsCollector) GetNetworkLatency() (map[string]float64, error) {
+	destinations := []string{"8.8.8.8", "1.1.1.1", "github.com", "google.com"}
+	results := make(map[string]float64)
+	
+	for _, dest := range destinations {
+		// Use ping with 3 packets and timeout after 2 seconds
+		cmd := exec.Command("powershell", "-Command", 
+			fmt.Sprintf("$ping = Test-Connection -ComputerName %s -Count 3 -ErrorAction SilentlyContinue; if ($ping) { ($ping | Measure-Object -Property ResponseTime -Average).Average } else { -1 }", dest))
+		output, err := cmd.CombinedOutput()
+		
+		if err != nil {
+			results[dest] = -1 // Mark as failed
+			continue
+		}
+		
+		latencyStr := strings.TrimSpace(string(output))
+		latency, err := strconv.ParseFloat(latencyStr, 64)
+		if err != nil {
+			results[dest] = -1
+		} else {
+			results[dest] = latency
+		}
+	}
+	
+	return results, nil
+}
+
+// GetPacketLoss calculates packet loss percentage to common destinations
+func (wc *WindowsCollector) GetPacketLoss() (map[string]float64, error) {
+	destinations := []string{"8.8.8.8", "1.1.1.1", "github.com", "google.com"}
+	results := make(map[string]float64)
+	
+	for _, dest := range destinations {
+		// Use ping with 5 packets to calculate packet loss
+		cmd := exec.Command("powershell", "-Command", 
+			fmt.Sprintf("$ping = ping -n 5 %s; $loss = [regex]::Match($ping, '(\\d+)%% loss').Groups[1].Value; if ($loss) { $loss } else { 100 }", dest))
+		output, err := cmd.CombinedOutput()
+		
+		if err != nil {
+			results[dest] = 100.0 // 100% packet loss on error
+			continue
+		}
+		
+		lossStr := strings.TrimSpace(string(output))
+		loss, err := strconv.ParseFloat(lossStr, 64)
+		if err != nil {
+			results[dest] = 100.0
+		} else {
+			results[dest] = loss
+		}
+	}
+	
+	return results, nil
+}

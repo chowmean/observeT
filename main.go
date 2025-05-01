@@ -69,6 +69,54 @@ var (
 		[]string{"interface"},
 	)
 	
+	networkRxErrorsGauges = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "system_network_rx_errors",
+			Help: "Network receive errors count",
+		},
+		[]string{"interface"},
+	)
+
+	networkTxErrorsGauges = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "system_network_tx_errors",
+			Help: "Network transmit errors count",
+		},
+		[]string{"interface"},
+	)
+
+	networkRxDroppedGauges = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "system_network_rx_dropped",
+			Help: "Network packets dropped on receive",
+		},
+		[]string{"interface"},
+	)
+
+	networkTxDroppedGauges = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "system_network_tx_dropped",
+			Help: "Network packets dropped on transmit",
+		},
+		[]string{"interface"},
+	)
+
+	networkLatencyGauges = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "system_network_latency_ms",
+			Help: "Network latency to destination in milliseconds",
+		},
+		[]string{"destination"},
+	)
+
+	networkPacketLossGauges = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "system_network_packet_loss_percent",
+			Help: "Percentage of packet loss to destination",
+		},
+		[]string{"destination"},
+	)
+	
 	contextSwitchesGauge = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "system_context_switches_per_second",
 		Help: "Context switches per second",
@@ -122,6 +170,22 @@ var (
 			Help: "1 if network transmit bandwidth exceeds threshold, 0 otherwise",
 		},
 		[]string{"interface"},
+	)
+	
+	networkLatencyThresholdBreached = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "system_network_latency_threshold_breached",
+			Help: "1 if network latency exceeds threshold, 0 otherwise",
+		},
+		[]string{"destination"},
+	)
+
+	networkPacketLossThresholdBreached = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "system_network_packet_loss_threshold_breached",
+			Help: "1 if network packet loss exceeds threshold, 0 otherwise",
+		},
+		[]string{"destination"},
 	)
 	
 	contextSwitchesThresholdBreached = prometheus.NewGauge(prometheus.GaugeOpts{
@@ -236,6 +300,66 @@ func collectMetricsLoop(collector sysinfo.MetricsCollector) {
 					}
 				}
 			}
+            
+            // Collect and update network errors metrics
+            netErrors, err := collector.GetNetworkErrors()
+            if err == nil {
+                for iface, errors := range netErrors {
+                    rxErrors := float64(errors[0])
+                    txErrors := float64(errors[1])
+                    
+                    networkRxErrorsGauges.WithLabelValues(iface).Set(rxErrors)
+                    networkTxErrorsGauges.WithLabelValues(iface).Set(txErrors)
+                }
+            }
+            
+            // Collect and update network dropped packets metrics
+            netDropped, err := collector.GetNetworkDropped()
+            if err == nil {
+                for iface, dropped := range netDropped {
+                    rxDropped := float64(dropped[0])
+                    txDropped := float64(dropped[1])
+                    
+                    networkRxDroppedGauges.WithLabelValues(iface).Set(rxDropped)
+                    networkTxDroppedGauges.WithLabelValues(iface).Set(txDropped)
+                }
+            }
+            
+            // Collect and update network latency metrics
+            netLatency, err := collector.GetNetworkLatency()
+            if err == nil {
+                for dest, latency := range netLatency {
+                    if latency >= 0 { // Only record valid measurements
+                        networkLatencyGauges.WithLabelValues(dest).Set(latency)
+                        
+                        // Set latency threshold breach metric
+                        // Default threshold is 100ms
+                        latencyThreshold := 100.0 // ms
+                        if latency > latencyThreshold {
+                            networkLatencyThresholdBreached.WithLabelValues(dest).Set(1)
+                        } else {
+                            networkLatencyThresholdBreached.WithLabelValues(dest).Set(0)
+                        }
+                    }
+                }
+            }
+            
+            // Collect and update packet loss metrics
+            packetLoss, err := collector.GetPacketLoss()
+            if err == nil {
+                for dest, loss := range packetLoss {
+                    networkPacketLossGauges.WithLabelValues(dest).Set(loss)
+                    
+                    // Set packet loss threshold breach metric
+                    // Default threshold is 1% packet loss
+                    lossThreshold := 1.0 // % 
+                    if loss > lossThreshold {
+                        networkPacketLossThresholdBreached.WithLabelValues(dest).Set(1)
+                    } else {
+                        networkPacketLossThresholdBreached.WithLabelValues(dest).Set(0)
+                    }
+                }
+            }
 		}
 		
 		// Collect and update context switches metric
@@ -343,8 +467,16 @@ func main() {
 	if AppConfig.CollectNetworkMetrics {
 		prometheus.MustRegister(networkRxGauges)
 		prometheus.MustRegister(networkTxGauges)
+		prometheus.MustRegister(networkRxErrorsGauges)
+		prometheus.MustRegister(networkTxErrorsGauges)
+		prometheus.MustRegister(networkRxDroppedGauges)
+		prometheus.MustRegister(networkTxDroppedGauges)
+		prometheus.MustRegister(networkLatencyGauges)
+		prometheus.MustRegister(networkPacketLossGauges)
 		prometheus.MustRegister(networkRxThresholdBreached)
 		prometheus.MustRegister(networkTxThresholdBreached)
+		prometheus.MustRegister(networkLatencyThresholdBreached)
+		prometheus.MustRegister(networkPacketLossThresholdBreached)
 	}
 	
 	if AppConfig.CollectContextSwitchMetrics {

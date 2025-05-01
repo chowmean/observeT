@@ -3,7 +3,6 @@
 [![License](https://img.shields.io/github/license/chowmean/observeT)](LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/chowmean/observeT)](go.mod)
 [![Latest Release](https://img.shields.io/github/v/release/chowmean/observeT)](https://github.com/chowmean/observeT/releases)
-[![Build Status](https://img.shields.io/github/workflow/status/chowmean/observeT/build)](https://github.com/chowmean/observeT/actions)
 [![Go Report Card](https://goreportcard.com/badge/github.com/chowmean/observeT)](https://goreportcard.com/report/github.com/chowmean/observeT)
 [![Contributors](https://img.shields.io/github/contributors/chowmean/observeT)](https://github.com/chowmean/observeT/graphs/contributors)
 
@@ -19,6 +18,8 @@ A lightweight system monitoring tool for macOS that collects system metrics, exp
   - Memory usage and availability
   - Disk utilization
   - Network bandwidth (RX/TX)
+  - Network errors and dropped packets
+  - Network latency and packet loss
   - Context switches
   - Page faults
 - Selective metrics collection (enable/disable specific metrics)

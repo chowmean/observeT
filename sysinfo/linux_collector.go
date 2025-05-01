@@ -355,6 +355,199 @@ func readNetworkStats() (map[string][2]int64, error) {
 	return stats, nil
 }
 
+// GetNetworkErrors returns network interface errors (in and out) per interface
+func (lc *LinuxCollector) GetNetworkErrors() (map[string][2]int64, error) {
+	// In Linux, network errors can be read from /proc/net/dev
+	file, err := os.Open("/proc/net/dev")
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	interfaces := make(map[string][2]int64)
+
+	// Skip first two header lines
+	scanner.Scan()
+	scanner.Scan()
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 17 {
+			continue
+		}
+
+		// Interface name is field[0] with colon
+		iface := strings.TrimSuffix(fields[0], ":")
+		
+		// Skip loopback interface
+		if iface == "lo" {
+			continue
+		}
+		
+		// On Linux, /proc/net/dev shows receive errors in column 3 and transmit errors in column 11
+		rxErrors, err1 := strconv.ParseInt(fields[3], 10, 64)
+		txErrors, err2 := strconv.ParseInt(fields[11], 10, 64)
+
+		if err1 == nil && err2 == nil {
+			interfaces[iface] = [2]int64{rxErrors, txErrors}
+		}
+	}
+
+	return interfaces, nil
+}
+
+// GetNetworkDropped returns dropped packets (in and out) per interface
+func (lc *LinuxCollector) GetNetworkDropped() (map[string][2]int64, error) {
+	// In Linux, dropped packets can be read from /proc/net/dev
+	file, err := os.Open("/proc/net/dev")
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	interfaces := make(map[string][2]int64)
+
+	// Skip first two header lines
+	scanner.Scan()
+	scanner.Scan()
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 17 {
+			continue
+		}
+
+		// Interface name is field[0] with colon
+		iface := strings.TrimSuffix(fields[0], ":")
+		
+		// Skip loopback interface
+		if iface == "lo" {
+			continue
+		}
+		
+		// On Linux, /proc/net/dev shows receive drops in column 4 and transmit drops in column 12
+		rxDropped, err1 := strconv.ParseInt(fields[4], 10, 64)
+		txDropped, err2 := strconv.ParseInt(fields[12], 10, 64)
+
+		if err1 == nil && err2 == nil {
+			interfaces[iface] = [2]int64{rxDropped, txDropped}
+		}
+	}
+
+	return interfaces, nil
+}
+
+// GetNetworkLatency measures latency to common destinations
+func (lc *LinuxCollector) GetNetworkLatency() (map[string]float64, error) {
+	destinations := []string{"8.8.8.8", "1.1.1.1", "github.com", "google.com"}
+	results := make(map[string]float64)
+	
+	for _, dest := range destinations {
+		// Use ping with 3 packets and timeout after 2 seconds
+		cmd := exec.Command("ping", "-c", "3", "-W", "2", dest)
+		output, err := cmd.CombinedOutput()
+		
+		if err != nil {
+			results[dest] = -1 // Mark as failed
+			continue
+		}
+		
+		// Parse ping output for round-trip time
+		outputStr := string(output)
+		latency := extractLinuxPingLatency(outputStr)
+		results[dest] = latency
+	}
+	
+	return results, nil
+}
+
+// GetPacketLoss calculates packet loss percentage to common destinations
+func (lc *LinuxCollector) GetPacketLoss() (map[string]float64, error) {
+	destinations := []string{"8.8.8.8", "1.1.1.1", "github.com", "google.com"}
+	results := make(map[string]float64)
+	
+	for _, dest := range destinations {
+		// Use ping with 5 packets
+		cmd := exec.Command("ping", "-c", "5", "-W", "2", dest)
+		output, err := cmd.CombinedOutput()
+		
+		if err != nil {
+			results[dest] = 100.0 // 100% packet loss on error
+			continue
+		}
+		
+		// Parse ping output for packet loss
+		outputStr := string(output)
+		packetLoss := extractLinuxPacketLoss(outputStr)
+		results[dest] = packetLoss
+	}
+	
+	return results, nil
+}
+
+// Helper function to extract average latency from ping output (Linux version)
+func extractLinuxPingLatency(pingOutput string) float64 {
+	// Look for the statistics line with avg=
+	lines := strings.Split(pingOutput, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "rtt min/avg/max/mdev") {
+			// Format: rtt min/avg/max/mdev = 21.752/35.286/56.280/14.092 ms
+			parts := strings.Split(line, "=")
+			if len(parts) < 2 {
+				return -1
+			}
+			
+			stats := strings.Split(parts[1], "/")
+			if len(stats) < 4 {
+				return -1
+			}
+			
+			avg, err := strconv.ParseFloat(strings.TrimSpace(stats[1]), 64)
+			if err != nil {
+				return -1
+			}
+			
+			return avg // Return average latency in ms
+		}
+	}
+	
+	return -1 // Could not parse
+}
+
+// Helper function to extract packet loss percentage from ping output (Linux version)
+func extractLinuxPacketLoss(pingOutput string) float64 {
+	// Look for the packet loss line
+	lines := strings.Split(pingOutput, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "packet loss") {
+			// Format: "5 packets transmitted, 5 received, 0% packet loss"
+			parts := strings.Split(line, ",")
+			for _, part := range parts {
+				if strings.Contains(part, "packet loss") {
+					// Extract the percentage
+					fields := strings.Fields(part)
+					for _, field := range fields {
+						if strings.HasSuffix(field, "%") {
+							lossStr := strings.TrimSuffix(field, "%")
+							loss, err := strconv.ParseFloat(lossStr, 64)
+							if err == nil {
+								return loss
+							}
+							return 100.0 // Default to 100% on parsing error
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	return 100.0 // Default to 100% if we couldn't parse
+}
+
 // GetContextSwitches returns the number of context switches per second
 func (lc *LinuxCollector) GetContextSwitches() (int, error) {
 	count1, err := readContextSwitchCount()

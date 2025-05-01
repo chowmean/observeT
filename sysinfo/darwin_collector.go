@@ -378,3 +378,204 @@ func (dc *DarwinCollector) GetPageFaults() (int, error) {
 	
 	return pf2 - pf1, nil
 }
+
+// GetNetworkErrors returns network interface errors (in and out) per interface
+func (dc *DarwinCollector) GetNetworkErrors() (map[string][2]int64, error) {
+	cmd := exec.Command("netstat", "-ib")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, err
+	}
+	
+	lines := strings.Split(string(output), "\n")
+	interfaces := make(map[string][2]int64)
+	
+	for i, line := range lines {
+		if i > 0 && len(line) > 0 { // Skip header
+			fields := strings.Fields(line)
+			if len(fields) >= 8 {
+				ifaceName := fields[0]
+				// Skip loopback interface
+				if ifaceName == "lo0" {
+					continue
+				}
+				
+				ierrors, err1 := strconv.ParseInt(fields[7], 10, 64) // Input errors
+				oerrors := int64(0)
+				
+				// Output errors are not directly provided in netstat -ib
+				// Use netstat -i for output errors
+				if err1 == nil {
+					interfaces[ifaceName] = [2]int64{ierrors, oerrors}
+				}
+			}
+		}
+	}
+	
+	// Get output errors separately using netstat -i
+	cmd = exec.Command("netstat", "-i")
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		return interfaces, nil // Return what we have so far
+	}
+	
+	lines = strings.Split(string(output), "\n")
+	
+	for i, line := range lines {
+		if i > 0 && len(line) > 0 { // Skip header
+			fields := strings.Fields(line)
+			if len(fields) >= 11 { // netstat -i has a different format
+				ifaceName := fields[0]
+				// Skip loopback and entries with <Link>
+				if ifaceName == "lo0" || strings.Contains(line, "<Link>") {
+					continue
+				}
+				
+				if errors, exists := interfaces[ifaceName]; exists {
+					oerrors, err := strconv.ParseInt(fields[7], 10, 64) // Output errors
+					if err == nil {
+						interfaces[ifaceName] = [2]int64{errors[0], oerrors}
+					}
+				}
+			}
+		}
+	}
+	
+	return interfaces, nil
+}
+
+// GetNetworkDropped returns dropped packets (in and out) per interface
+func (dc *DarwinCollector) GetNetworkDropped() (map[string][2]int64, error) {
+	cmd := exec.Command("netstat", "-ib")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, err
+	}
+	
+	lines := strings.Split(string(output), "\n")
+	interfaces := make(map[string][2]int64)
+	
+	for i, line := range lines {
+		if i > 0 && len(line) > 0 { // Skip header
+			fields := strings.Fields(line)
+			if len(fields) >= 11 { // Make sure we have enough fields
+				ifaceName := fields[0]
+				// Skip loopback interface
+				if ifaceName == "lo0" {
+					continue
+				}
+				
+				// On macOS, netstat -ib shows dropped packets in column 8 for input
+				idrops, err1 := strconv.ParseInt(fields[8], 10, 64) // Input drops
+				odrops := int64(0) // macOS doesn't show output drops directly
+				
+				if err1 == nil {
+					interfaces[ifaceName] = [2]int64{idrops, odrops}
+				}
+			}
+		}
+	}
+	
+	return interfaces, nil
+}
+
+// GetNetworkLatency measures latency to common destinations
+func (dc *DarwinCollector) GetNetworkLatency() (map[string]float64, error) {
+	destinations := []string{"8.8.8.8", "1.1.1.1", "github.com", "google.com"}
+	results := make(map[string]float64)
+	
+	for _, dest := range destinations {
+		// Use ping with 3 packets and timeout after 2 seconds
+		cmd := exec.Command("ping", "-c", "3", "-W", "2000", dest)
+		output, err := cmd.CombinedOutput()
+		
+		if err != nil {
+			results[dest] = -1 // Mark as failed
+			continue
+		}
+		
+		// Parse ping output for round-trip time
+		outputStr := string(output)
+		latency := extractPingLatency(outputStr)
+		results[dest] = latency
+	}
+	
+	return results, nil
+}
+
+// GetPacketLoss calculates packet loss percentage to common destinations
+func (dc *DarwinCollector) GetPacketLoss() (map[string]float64, error) {
+	destinations := []string{"8.8.8.8", "1.1.1.1", "github.com", "google.com"}
+	results := make(map[string]float64)
+	
+	for _, dest := range destinations {
+		// Use ping with 5 packets
+		cmd := exec.Command("ping", "-c", "5", "-W", "2000", dest)
+		output, err := cmd.CombinedOutput()
+		
+		if err != nil {
+			results[dest] = 100.0 // 100% packet loss on error
+			continue
+		}
+		
+		// Parse ping output for packet loss
+		outputStr := string(output)
+		packetLoss := extractPacketLoss(outputStr)
+		results[dest] = packetLoss
+	}
+	
+	return results, nil
+}
+
+// Helper function to extract average latency from ping output
+func extractPingLatency(pingOutput string) float64 {
+	// Look for the statistics line with avg=
+	lines := strings.Split(pingOutput, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "round-trip") || strings.Contains(line, "rtt") {
+			// Format: round-trip min/avg/max/stddev = 21.752/35.286/56.280/14.092 ms
+			parts := strings.Split(line, "=")
+			if len(parts) < 2 {
+				return -1
+			}
+			
+			stats := strings.Split(parts[1], "/")
+			if len(stats) < 4 {
+				return -1
+			}
+			
+			avg, err := strconv.ParseFloat(strings.TrimSpace(stats[1]), 64)
+			if err != nil {
+				return -1
+			}
+			
+			return avg // Return average latency in ms
+		}
+	}
+	
+	return -1 // Could not parse
+}
+
+// Helper function to extract packet loss percentage from ping output
+func extractPacketLoss(pingOutput string) float64 {
+	// Look for the packet loss line
+	lines := strings.Split(pingOutput, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "packet loss") {
+			// Format: "5 packets transmitted, 5 received, 0.0% packet loss"
+			parts := strings.Split(line, ",")
+			for _, part := range parts {
+				if strings.Contains(part, "packet loss") {
+					lossStr := strings.TrimSpace(strings.Split(part, "%")[0])
+					loss, err := strconv.ParseFloat(lossStr, 64)
+					if err == nil {
+						return loss
+					}
+					return 100.0 // Default to 100% on parsing error
+				}
+			}
+		}
+	}
+	
+	return 100.0 // Default to 100% if we couldn't parse
+}
