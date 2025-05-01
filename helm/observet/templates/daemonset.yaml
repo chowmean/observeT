@@ -4,7 +4,15 @@ metadata:
   name: {{ include "observet.fullname" . }}
   labels:
     {{- include "observet.labels" . | nindent 4 }}
+  {{- with .Values.daemonset.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   selector:
     matchLabels:
       {{- include "observet.selectorLabels" . | nindent 6 }}
@@ -17,6 +25,7 @@ spec:
       labels:
         {{- include "observet.selectorLabels" . | nindent 8 }}
     spec:
+      hostNetwork: {{ .Values.daemonset.hostNetwork }}
       containers:
       - name: {{ .Chart.Name }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -37,6 +46,20 @@ spec:
         - name: metrics
           containerPort: {{ .Values.service.port }}
           protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: metrics
+          initialDelaySeconds: {{ .Values.daemonset.probes.liveness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.daemonset.probes.liveness.periodSeconds }}
+          timeoutSeconds: {{ .Values.daemonset.probes.liveness.timeoutSeconds }}
+          failureThreshold: {{ .Values.daemonset.probes.liveness.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: metrics
+          initialDelaySeconds: {{ .Values.daemonset.probes.readiness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.daemonset.probes.readiness.periodSeconds }}
         resources:
           {{- toYaml .Values.daemonset.resources | nindent 10 }}
         env:

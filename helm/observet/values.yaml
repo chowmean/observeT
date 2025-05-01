@@ -1,13 +1,14 @@
 # Default values for ObservT Helm chart
 image:
   repository: observet
-  tag: latest
+  tag: 0.0.2  # Using specific version instead of "latest"
   pullPolicy: IfNotPresent
 
 # Configuration for the DaemonSet
 daemonset:
-  annotations: {}
-  podAnnotations:
+  hostNetwork: true  # Use host's network namespace
+  annotations: {}    # For DaemonSet object annotations
+  podAnnotations:    # For pod template annotations
     prometheus.io/scrape: "true"
     prometheus.io/port: "9095"
     prometheus.io/path: "/metrics"
@@ -18,6 +19,16 @@ daemonset:
     requests:
       cpu: 50m
       memory: 64Mi
+  # Probe configuration
+  probes:
+    liveness:
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    readiness:
+      initialDelaySeconds: 5
+      periodSeconds: 10
   tolerations:
     - key: node-role.kubernetes.io/master
       effect: NoSchedule
