@@ -1,0 +1,76 @@
+# Default values for ObservT Helm chart
+image:
+  repository: observet
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Configuration for the DaemonSet
+daemonset:
+  annotations: {}
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9095"
+    prometheus.io/path: "/metrics"
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+  tolerations:
+    - key: node-role.kubernetes.io/master
+      effect: NoSchedule
+      operator: Exists
+  nodeSelector: {}
+  affinity: {}
+
+# Service configuration to expose metrics
+service:
+  type: ClusterIP
+  port: 9095
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9095"
+    prometheus.io/path: "/metrics"
+
+# Configuration for ObservT
+config:
+  # Alert thresholds
+  thresholds:
+    cpuUsage: 90.0
+    loadMultiplier: 2.0
+    memUsage: 75.0
+    memAvailablePercent: 5.0
+    diskUtil: 90.0
+    netUtil: 70.0
+    contextSwitchPerCore: 10000
+    pageFaultRate: 500
+
+  # Duration for sampling (seconds)
+  sampling:
+    interval: 1
+    count: 3
+  
+  # Metric collection flags - all enabled by default
+  metrics:
+    collectCpu: true
+    collectLoad: true
+    collectMemory: true
+    collectDisk: true
+    collectNetwork: true
+    collectContextSwitch: true
+    collectPageFault: true
+
+# Configure ServiceMonitor for Prometheus Operator integration
+serviceMonitor:
+  enabled: false
+  interval: 15s
+  additionalLabels: {}
+
+# Security context for the container
+securityContext:
+  privileged: true  # Required for system-level monitoring
+  capabilities:
+    add:
+      - SYS_ADMIN

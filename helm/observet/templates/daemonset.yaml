@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "observet.fullname" . }}
+  labels:
+    {{- include "observet.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "observet.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.daemonset.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "observet.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 10 }}
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config.yaml
+          subPath: config.yaml
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: sys
+          mountPath: /host/sys
+          readOnly: true
+        ports:
+        - name: metrics
+          containerPort: {{ .Values.service.port }}
+          protocol: TCP
+        resources:
+          {{- toYaml .Values.daemonset.resources | nindent 10 }}
+        env:
+        - name: HOST_PROC
+          value: "/host/proc"
+        - name: HOST_SYS
+          value: "/host/sys"
+      volumes:
+      - name: config-volume
+        configMap:
+          name: {{ include "observet.fullname" . }}-config
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: sys
+        hostPath:
+          path: /sys
+      {{- with .Values.daemonset.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.daemonset.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.daemonset.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

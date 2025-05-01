@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "observet.fullname" . }}-config
+  labels:
+    {{- include "observet.labels" . | nindent 4 }}
+data:
+  config.yaml: |-
+    # System monitor configuration
+
+    # Color codes for terminal output
+    colors:
+      red: "\033[31m"
+      green: "\033[32m"
+      reset: "\033[0m"
+
+    # Alert thresholds
+    thresholds:
+      cpuUsage: {{ .Values.config.thresholds.cpuUsage }}
+      loadMultiplier: {{ .Values.config.thresholds.loadMultiplier }}
+      memUsage: {{ .Values.config.thresholds.memUsage }}
+      memAvailablePercent: {{ .Values.config.thresholds.memAvailablePercent }}
+      diskUtil: {{ .Values.config.thresholds.diskUtil }}
+      netUtil: {{ .Values.config.thresholds.netUtil }}
+      contextSwitchPerCore: {{ .Values.config.thresholds.contextSwitchPerCore }}
+      pageFaultRate: {{ .Values.config.thresholds.pageFaultRate }}
+
+    # Duration for sampling (seconds)
+    sampling:
+      interval: {{ .Values.config.sampling.interval }}
+      count: {{ .Values.config.sampling.count }}
+      
+    # Metric collection flags - all enabled by default
+    metrics:
+      collectCpu: {{ .Values.config.metrics.collectCpu }}
+      collectLoad: {{ .Values.config.metrics.collectLoad }}
+      collectMemory: {{ .Values.config.metrics.collectMemory }}
+      collectDisk: {{ .Values.config.metrics.collectDisk }}
+      collectNetwork: {{ .Values.config.metrics.collectNetwork }}
+      collectContextSwitch: {{ .Values.config.metrics.collectContextSwitch }}
+      collectPageFault: {{ .Values.config.metrics.collectPageFault }}

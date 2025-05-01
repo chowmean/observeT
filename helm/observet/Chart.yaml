@@ -1,0 +1,14 @@
+apiVersion: v2
+name: observet
+description: A Helm chart for ObservT system monitoring tool
+type: application
+version: 0.1.0
+appVersion: "0.0.2"
+keywords:
+  - monitoring
+  - metrics
+  - system
+  - prometheus
+maintainers:
+  - name: ObservT Team
+    email: maintainer@example.com
